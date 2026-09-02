@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Edgebanding">
+<meta name="theme-color" content="#E6E7E3">
+<title>Edgebanding roll calculator</title>
+<style>
+:root{
+  --panel:#E6E7E3; --card:#FCFCFB; --ink:#17191A; --muted:#6C7176;
+  --rule:#CDD0CB; --amber:#E5A00D; --amber-deep:#9C6C03; --band:#2F3336;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0}
+body{
+  background:var(--panel); color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  font-size:17px; line-height:1.4; -webkit-text-size-adjust:100%;
+  padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+.wrap{max-width:760px;margin:0 auto;padding:18px 18px 40px}
+.num{font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1}
+
+.card{background:var(--card);border:1px solid var(--rule);border-radius:10px;padding:18px;margin-bottom:14px}
+label{display:block;font-size:15px;color:var(--muted);margin-bottom:6px}
+input{
+  width:100%;height:64px;padding:0 14px;font-size:27px;font-weight:550;
+  font-variant-numeric:tabular-nums;color:var(--ink);background:#fff;
+  border:1.5px solid var(--rule);border-radius:8px;font-family:inherit;
+}
+input:focus{outline:none;border-color:var(--ink);box-shadow:0 0 0 3px rgba(23,25,26,.09)}
+:focus-visible{outline:3px solid var(--amber);outline-offset:2px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.span{grid-column:1/-1}
+
+.out{background:var(--card);border:1px solid var(--rule);border-radius:10px;padding:20px;margin-bottom:14px}
+.out-body{display:flex;align-items:center;gap:22px}
+.dial{flex:none;width:150px;height:150px}
+.figs{flex:1;min-width:0}
+.big{display:flex;align-items:baseline;gap:8px}
+.big .val{font-size:68px;font-weight:650;letter-spacing:-.045em;line-height:.92}
+.big .unit{font-size:22px;font-weight:500;color:var(--muted)}
+.big .cap{font-size:15px;color:var(--muted);margin:4px 0 0}
+.second{margin-top:16px;padding-top:14px;border-top:1px solid var(--rule);
+  display:flex;align-items:baseline;gap:8px}
+.second .val{font-size:34px;font-weight:650;letter-spacing:-.03em}
+.second .unit{font-size:17px;font-weight:500;color:var(--muted)}
+.note{margin:14px 0 0;font-size:16px;color:var(--muted)}
+.note.err{color:#8A2A15}
+
+button.clear{
+  width:100%;height:58px;background:none;border:1.5px solid var(--rule);border-radius:8px;
+  font-family:inherit;font-size:17px;font-weight:550;color:var(--ink);margin-top:4px;
+}
+button.clear:active{background:#EFF0ED}
+@media (max-width:560px){
+  .grid{grid-template-columns:1fr}
+  .out-body{flex-direction:column;align-items:stretch;gap:16px}
+  .dial{align-self:center}
+  .big .val{font-size:60px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <section class="out">
+    <div class="out-body">
+      <svg class="dial" id="dial" viewBox="0 0 200 200" aria-hidden="true">
+        <circle id="dFull" cx="100" cy="100" r="90" fill="none" stroke="#CDD0CB" stroke-width="1.5" stroke-dasharray="4 5"/>
+        <circle id="dTape" cx="100" cy="100" r="55" fill="none" stroke="#2F3336" stroke-width="0"/>
+        <circle id="dCore" cx="100" cy="100" r="22" fill="#E6E7E3" stroke="#CDD0CB" stroke-width="1.5"/>
+      </svg>
+      <div class="figs">
+        <div class="big">
+          <span class="val num" id="remVal">—</span>
+          <span class="unit">ft left</span>
+        </div>
+        <p class="cap" id="pctCap"></p>
+        <div class="second">
+          <span class="val num" id="usedVal">—</span>
+          <span class="unit">ft used</span>
+        </div>
+        <p class="note" id="note">Enter the roll and tape numbers.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="grid">
+      <div class="span">
+        <label for="start">Starting roll length (ft)</label>
+        <input id="start" type="text" inputmode="decimal" placeholder="328">
+      </div>
+      <div>
+        <label for="od">Outer diameter (mm)</label>
+        <input id="od" type="text" inputmode="decimal" placeholder="286">
+      </div>
+      <div>
+        <label for="id">Inner diameter (mm)</label>
+        <input id="id" type="text" inputmode="decimal" placeholder="60">
+      </div>
+      <div class="span">
+        <label for="thick">Tape thickness (mm)</label>
+        <input id="thick" type="text" inputmode="decimal" placeholder="1.0">
+      </div>
+    </div>
+    <button class="clear" id="btnClear">Clear</button>
+  </section>
+
+</div>
+
+<script>
+(function(){
+"use strict";
+var MM_PER_FT=304.8;
+var $=function(i){return document.getElementById(i);};
+
+function num(s){
+  if(s==null)return NaN;
+  s=String(s).trim().replace(/[",]/g,'').replace(/mm$/i,'').replace(/ft$/i,'').trim();
+  return /^\d+(\.\d+)?$/.test(s)?parseFloat(s):NaN;
+}
+function fmt(n,d){d=(d===undefined)?1:d;return (Math.round(n*Math.pow(10,d))/Math.pow(10,d)).toFixed(d);}
+
+/*  Tape is a flat spiral, so its cross-section is a ring.
+    ring area = (pi/4)(OD^2 - ID^2) mm^2
+    length    = area / thickness      mm
+    feet      = length / 304.8                                   */
+function feetOnRoll(od,id,t){
+  return (Math.PI*(od*od-id*id))/(4*t*MM_PER_FT);
+}
+function fullOD(ft,id,t){
+  return Math.sqrt(id*id+(4*t*ft*MM_PER_FT)/Math.PI);
+}
+
+function drawDial(od,id,t,start){
+  var tape=$('dTape'), core=$('dCore'), full=$('dFull');
+  var maxR=90;
+  var fo=(start>0&&id>0&&t>0)?fullOD(start,id,t):NaN;
+  if(!(fo>0)||!(id>0)){
+    tape.setAttribute('stroke-width',0);
+    core.setAttribute('r',22); full.setAttribute('r',maxR);
+    return;
+  }
+  var scale=maxR/(fo/2);
+  var rCore=Math.max(4,(id/2)*scale);
+  var rNow=(od>=id)?Math.min((od/2)*scale,maxR):rCore;
+  var w=Math.max(0,rNow-rCore);
+  core.setAttribute('r',rCore);
+  tape.setAttribute('r',rCore+w/2);
+  tape.setAttribute('stroke-width',w);
+  full.setAttribute('r',maxR);
+}
+
+function calc(){
+  var start=num($('start').value), od=num($('od').value),
+      id=num($('id').value), t=num($('thick').value);
+  var note=$('note'); note.classList.remove('err');
+
+  drawDial(od,id,t,start);
+
+  if(!(od>0&&id>0&&t>0)){
+    $('remVal').textContent='—'; $('usedVal').textContent='—';
+    $('pctCap').textContent='';
+    note.textContent='Enter the roll and tape numbers.';
+    return;
+  }
+  if(od<id){
+    $('remVal').textContent='—'; $('usedVal').textContent='—';
+    $('pctCap').textContent='';
+    note.textContent='Outer diameter is smaller than the inner diameter.';
+    note.classList.add('err');
+    return;
+  }
+
+  var rem=feetOnRoll(od,id,t);
+  $('remVal').textContent=fmt(rem,0);
+
+  if(!(start>0)){
+    $('usedVal').textContent='—';
+    $('pctCap').textContent='';
+    note.textContent='Add the starting length to get feet used.';
+    return;
+  }
+
+  if(rem>start){
+    $('usedVal').textContent='0';
+    $('pctCap').textContent='';
+    note.textContent='That measures larger than a full '+fmt(start,0)+' ft roll. Check the inner diameter and thickness.';
+    note.classList.add('err');
+    return;
+  }
+
+  $('usedVal').textContent=fmt(start-rem,0);
+  $('pctCap').textContent=Math.round((rem/start)*100)+'% of the roll left';
+  note.textContent='Full roll measures '+fmt(fullOD(start,id,t),0)+' mm across.';
+}
+
+['start','od','id','thick'].forEach(function(k){$(k).addEventListener('input',calc);});
+$('btnClear').onclick=function(){
+  ['start','od','id','thick'].forEach(function(k){$(k).value='';});
+  calc(); $('start').focus();
+};
+calc();
+})();
+</script>
+</body>
+</html>
